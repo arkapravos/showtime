@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShowTime - Screen Recorder</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 2.5rem; }
+        h1 { 
+            font-size: 3rem; 
+            margin-bottom: 0.5rem; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+        .subtitle { 
+            color: #6b7280; 
+            font-size: 1.1rem;
+            font-weight: 400;
+        }
+        .main-panel {
+            background: white;
+            border-radius: 1.5rem;
+            padding: 2.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            margin-bottom: 2rem;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        .preview-area {
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e2e8f0 100%);
+            border-radius: 1rem;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #e2e8f0;
+        }
+        #canvas { width: 100%; height: 100%; object-fit: contain; }
+        .placeholder { text-align: center; color: #9ca3af; }
+        .placeholder-icon { font-size: 4rem; margin-bottom: 1rem; }
+        .recording-indicator {
+            position: absolute;
+            top: 1.5rem;
+            left: 1.5rem;
+            background: linear-gradient(135deg, #f43f5e 0%, #dc2626 100%);
+            padding: 0.75rem 1.25rem;
+            border-radius: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 600;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(244, 63, 94, 0.4);
+        }
+        .recording-dot {
+            width: 0.75rem;
+            height: 0.75rem;
+            background: white;
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .status-message {
+            padding: 1rem;
+            border-radius: 0.75rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            font-weight: 500;
+        }
+        .status-info {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            border: 1px solid #3b82f6;
+            color: #1e40af;
+        }
+        .status-error {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border: 1px solid #ef4444;
+            color: #991b1b;
+        }
+        .status-success {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border: 1px solid #10b981;
+            color: #065f46;
+        }
+        .controls-section { margin-bottom: 2rem; }
+        .controls-section label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: #374151;
+        }
+        .position-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+        }
+        .position-btn {
+            padding: 0.875rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.75rem;
+            background: white;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .position-btn:hover:not(:disabled) { 
+            border-color: #3b82f6;
+            color: #3b82f6;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+        }
+        .position-btn.active { 
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border-color: #3b82f6;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);
+        }
+        .position-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toggle-section {
+            margin-bottom: 2rem;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-radius: 1rem;
+            border: 1px solid #e5e7eb;
+        }
+        .toggle-section label {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            background: #d1d5db;
+            border-radius: 14px;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+        .toggle-switch.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+        .toggle-slider {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .toggle-switch.active .toggle-slider {
+            transform: translateX(24px);
+        }
+        .toggle-description {
+            color: #6b7280;
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+            font-weight: 400;
+        }
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 1rem 2.5rem;
+            border: none;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .btn-record {
+            background: linear-gradient(135deg, #f43f5e 0%, #dc2626 100%);
+            color: white;
+        }
+        .btn-record:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(244, 63, 94, 0.4);
+        }
+        .btn-stop {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            color: white;
+        }
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(107, 114, 128, 0.4);
+        }
+        .btn-download {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+        .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4);
+        }
+        .download-panel {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border: 2px solid #10b981;
+            border-radius: 1.5rem;
+            padding: 2rem;
+            text-align: center;
+        }
+        .download-panel h3 { 
+            font-size: 1.5rem; 
+            margin-bottom: 1.5rem;
+            color: #065f46;
+            font-weight: 700;
+        }
+        .hidden { display: none; }
+        .footer {
+            text-align: center;
+            margin-top: 3rem;
+            padding: 1.5rem;
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ShowTime</h1>
+            <p class="subtitle">Record your screen with webcam overlay | By Prof. Arka Sarkar</p>
+        </div>
+        <div class="main-panel">
+            <div id="statusContainer"></div>
+            <div class="preview-area">
+                <canvas id="canvas" class="hidden"></canvas>
+                <div id="placeholder" class="placeholder">
+                    <div class="placeholder-icon">
+                        <svg width="80" height="80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <p>Click "Start Recording" to begin</p>
+                </div>
+                <div id="recordingIndicator" class="recording-indicator hidden">
+                    <div class="recording-dot"></div>
+                    <span id="timer">00:00</span>
+                </div>
+            </div>
+            <div class="controls-section">
+                <label>Webcam Position</label>
+                <div class="position-grid">
+                    <button class="position-btn" data-position="top-left">Top Left</button>
+                    <button class="position-btn" data-position="top-right">Top Right</button>
+                    <button class="position-btn" data-position="bottom-left">Bottom Left</button>
+                    <button class="position-btn active" data-position="bottom-right">Bottom Right</button>
+                </div>
+            </div>
+            <div class="toggle-section">
+                <label>
+                    <div class="toggle-switch" id="bgBlurToggle">
+                        <div class="toggle-slider"></div>
+                    </div>
+                    <div>
+                        <div>Blur Background</div>
+                        <div class="toggle-description">Professional look, like Zoom/Teams meetings</div>
+                    </div>
+                </label>
+            </div>
+            <div class="button-group">
+                <button id="startBtn" class="btn btn-record">🎬 Start Recording</button>
+                <button id="stopBtn" class="btn btn-stop hidden">⏹️ Stop Recording</button>
+            </div>
+        </div>
+        <div id="downloadPanel" class="download-panel hidden">
+            <h3>✅ Recording Complete!</h3>
+            <button id="downloadBtn" class="btn btn-download">💾 Download Recording</button>
+        </div>
+        <div class="footer">
+            <p>© Copyright Arka Sarkar 2026</p>
+        </div>
+    </div>
+    <video id="screenVideo" style="display: none;" playsinline muted></video>
+    <video id="webcamVideo" style="display: none;" playsinline muted></video>
+    <canvas id="webcamCanvas" style="display: none;"></canvas>
+    <script>
+        (function() {
+            var state = {
+                isRecording: false, webcamPosition: 'bottom-right', mediaRecorder: null,
+                recordedChunks: [], screenStream: null, webcamStream: null,
+                animationFrame: null, timerInterval: null, recordingTime: 0, recordedBlob: null,
+                backgroundBlur: false, selfieSegmentation: null, segmentationReady: false
+            };
+            var elements = {
+                canvas: document.getElementById('canvas'),
+                ctx: document.getElementById('canvas').getContext('2d'),
+                screenVideo: document.getElementById('screenVideo'),
+                webcamVideo: document.getElementById('webcamVideo'),
+                webcamCanvas: document.getElementById('webcamCanvas'),
+                webcamCtx: document.getElementById('webcamCanvas').getContext('2d'),
+                startBtn: document.getElementById('startBtn'),
+                stopBtn: document.getElementById('stopBtn'),
+                downloadBtn: document.getElementById('downloadBtn'),
+                placeholder: document.getElementById('placeholder'),
+                recordingIndicator: document.getElementById('recordingIndicator'),
+                timer: document.getElementById('timer'),
+                statusContainer: document.getElementById('statusContainer'),
+                downloadPanel: document.getElementById('downloadPanel'),
+                bgBlurToggle: document.getElementById('bgBlurToggle')
+            };
+
+            // Background Blur Toggle
+            elements.bgBlurToggle.addEventListener('click', function() {
+                if (!state.isRecording) {
+                    state.backgroundBlur = !state.backgroundBlur;
+                    elements.bgBlurToggle.classList.toggle('active');
+                    if (state.backgroundBlur && !state.selfieSegmentation) {
+                        initializeSegmentation();
+                    }
+                }
+            });
+
+            function initializeSegmentation() {
+                showStatus('Loading AI model for background blur...', 'info');
+                state.selfieSegmentation = new SelfieSegmentation({
+                    locateFile: function(file) {
+                        return 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/' + file;
+                    }
+                });
+                state.selfieSegmentation.setOptions({
+                    modelSelection: 1,
+                    selfieMode: false
+                });
+                state.selfieSegmentation.onResults(onSegmentationResults);
+                state.segmentationReady = true;
+                showStatus('Background blur ready!', 'success');
+                setTimeout(clearStatus, 2000);
+            }
+
+            function onSegmentationResults(results) {
+                if (!elements.webcamCanvas || !results.image) return;
+                
+                var canvas = elements.webcamCanvas;
+                var ctx = elements.webcamCtx;
+                
+                canvas.width = results.image.width;
+                canvas.height = results.image.height;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Step 1: Draw the blurred background
+                ctx.filter = 'blur(20px)';
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                ctx.filter = 'none';
+                
+                // Step 2: Cut out the person shape from the blurred background
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+                
+                // Step 3: Draw the sharp person on top
+                ctx.globalCompositeOperation = 'source-over';
+                
+                // Create a temporary canvas for the sharp person
+                var tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                var tempCtx = tempCanvas.getContext('2d');
+                
+                // Draw sharp image
+                tempCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                
+                // Keep only the person using the mask
+                tempCtx.globalCompositeOperation = 'destination-in';
+                tempCtx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+                
+                // Draw the sharp person onto main canvas
+                ctx.drawImage(tempCanvas, 0, 0);
+                
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            async function processWebcamFrame() {
+                if (state.backgroundBlur && state.segmentationReady && elements.webcamVideo.readyState === 4) {
+                    await state.selfieSegmentation.send({image: elements.webcamVideo});
+                }
+                if (state.isRecording || state.backgroundBlur) {
+                    requestAnimationFrame(processWebcamFrame);
+                }
+            }
+
+            var positionButtons = document.querySelectorAll('.position-btn');
+            for (var i = 0; i < positionButtons.length; i++) {
+                positionButtons[i].addEventListener('click', handlePositionClick);
+            }
+            function handlePositionClick(event) {
+                if (!state.isRecording) {
+                    var buttons = document.querySelectorAll('.position-btn');
+                    for (var j = 0; j < buttons.length; j++) buttons[j].classList.remove('active');
+                    event.target.classList.add('active');
+                    state.webcamPosition = event.target.getAttribute('data-position');
+                }
+            }
+            function showStatus(message, type) {
+                var statusDiv = document.createElement('div');
+                statusDiv.className = 'status-message status-' + type;
+                statusDiv.textContent = message;
+                elements.statusContainer.innerHTML = '';
+                elements.statusContainer.appendChild(statusDiv);
+            }
+            function clearStatus() { elements.statusContainer.innerHTML = ''; }
+            function formatTime(seconds) {
+                var mins = Math.floor(seconds / 60), secs = seconds % 60;
+                return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+            }
+            function stopAllStreams() {
+                if (state.screenStream) {
+                    var tracks = state.screenStream.getTracks();
+                    for (var i = 0; i < tracks.length; i++) tracks[i].stop();
+                    state.screenStream = null;
+                }
+                if (state.webcamStream) {
+                    var tracks = state.webcamStream.getTracks();
+                    for (var i = 0; i < tracks.length; i++) tracks[i].stop();
+                    state.webcamStream = null;
+                }
+            }
+            function setupStreams(callback) {
+                showStatus('Requesting screen access...', 'info');
+                navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+                    .then(function(screenStreamResult) {
+                        state.screenStream = screenStreamResult;
+                        showStatus('Requesting webcam and microphone access...', 'info');
+                        return navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    })
+                    .then(function(webcamStreamResult) {
+                        state.webcamStream = webcamStreamResult;
+                        showStatus('Setting up preview...', 'info');
+                        elements.screenVideo.srcObject = state.screenStream;
+                        elements.webcamVideo.srcObject = state.webcamStream;
+                        elements.screenVideo.play();
+                        elements.webcamVideo.play();
+                        if (state.backgroundBlur && state.segmentationReady) {
+                            processWebcamFrame();
+                        }
+                        callback(true);
+                    })
+                    .catch(function(err) {
+                        showStatus('Error: ' + err.message, 'error');
+                        stopAllStreams();
+                        callback(false);
+                    });
+            }
+            function drawFrame() {
+                if (!elements.screenVideo.videoWidth || !elements.webcamVideo.videoWidth) {
+                    state.animationFrame = requestAnimationFrame(drawFrame);
+                    return;
+                }
+                elements.canvas.width = elements.screenVideo.videoWidth || 1920;
+                elements.canvas.height = elements.screenVideo.videoHeight || 1080;
+                elements.ctx.drawImage(elements.screenVideo, 0, 0, elements.canvas.width, elements.canvas.height);
+                
+                var webcamSource = state.backgroundBlur && state.segmentationReady ? elements.webcamCanvas : elements.webcamVideo;
+                var webcamWidth = elements.canvas.width * 0.2;
+                var webcamHeight = (elements.webcamVideo.videoHeight / elements.webcamVideo.videoWidth) * webcamWidth;
+                var margin = 20, x = 0, y = 0;
+                if (state.webcamPosition === 'top-left') { x = margin; y = margin; }
+                else if (state.webcamPosition === 'top-right') { x = elements.canvas.width - webcamWidth - margin; y = margin; }
+                else if (state.webcamPosition === 'bottom-left') { x = margin; y = elements.canvas.height - webcamHeight - margin; }
+                else { x = elements.canvas.width - webcamWidth - margin; y = elements.canvas.height - webcamHeight - margin; }
+                
+                elements.ctx.strokeStyle = '#ffffff';
+                elements.ctx.lineWidth = 3;
+                elements.ctx.strokeRect(x, y, webcamWidth, webcamHeight);
+                
+                // Flip webcam horizontally
+                elements.ctx.save();
+                elements.ctx.translate(x + webcamWidth, y);
+                elements.ctx.scale(-1, 1);
+                elements.ctx.drawImage(webcamSource, 0, 0, webcamWidth, webcamHeight);
+                elements.ctx.restore();
+                if (state.isRecording) state.animationFrame = requestAnimationFrame(drawFrame);
+            }
+            function startRecording() {
+                clearStatus();
+                elements.downloadPanel.classList.add('hidden');
+                setupStreams(function(success) {
+                    if (!success) return;
+                    setTimeout(function() {
+                        if (!state.screenStream || !state.webcamStream) return;
+                        showStatus('Starting recording...', 'info');
+                        var canvasStream = elements.canvas.captureStream(30);
+                        var audioTracks = state.screenStream.getAudioTracks().concat(state.webcamStream.getAudioTracks());
+                        for (var i = 0; i < audioTracks.length; i++) canvasStream.addTrack(audioTracks[i]);
+                        state.mediaRecorder = new MediaRecorder(canvasStream);
+                        state.recordedChunks = [];
+                        state.mediaRecorder.ondataavailable = function(e) {
+                            if (e.data.size > 0) state.recordedChunks.push(e.data);
+                        };
+                        state.mediaRecorder.onstop = function() {
+                            state.recordedBlob = new Blob(state.recordedChunks, { type: 'video/webm' });
+                            
+                            // Auto-download immediately
+                            var url = URL.createObjectURL(state.recordedBlob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'showtime-recording-' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.webm';
+                            a.click();
+                            URL.revokeObjectURL(url);
+                            
+                            showStatus('Recording saved to Downloads folder!', 'success');
+                            elements.downloadPanel.classList.remove('hidden');
+                        };
+                        state.mediaRecorder.start(100);
+                        state.isRecording = true;
+                        elements.placeholder.classList.add('hidden');
+                        elements.canvas.classList.remove('hidden');
+                        elements.recordingIndicator.classList.remove('hidden');
+                        elements.startBtn.classList.add('hidden');
+                        elements.stopBtn.classList.remove('hidden');
+                        showStatus('Recording...', 'info');
+                        drawFrame();
+                        state.recordingTime = 0;
+                        elements.timer.textContent = '00:00';
+                        state.timerInterval = setInterval(function() {
+                            state.recordingTime++;
+                            elements.timer.textContent = formatTime(state.recordingTime);
+                        }, 1000);
+                        var buttons = document.querySelectorAll('.position-btn');
+                        for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+                        elements.bgBlurToggle.style.opacity = '0.5';
+                        elements.bgBlurToggle.style.pointerEvents = 'none';
+                    }, 1000);
+                });
+            }
+            function stopRecording() {
+                if (state.mediaRecorder && state.isRecording) {
+                    state.mediaRecorder.stop();
+                    state.isRecording = false;
+                    showStatus('Saving recording...', 'info');
+                    if (state.animationFrame) cancelAnimationFrame(state.animationFrame);
+                    if (state.timerInterval) clearInterval(state.timerInterval);
+                    stopAllStreams();
+                    elements.recordingIndicator.classList.add('hidden');
+                    elements.startBtn.classList.remove('hidden');
+                    elements.stopBtn.classList.add('hidden');
+                    elements.placeholder.classList.remove('hidden');
+                    elements.canvas.classList.add('hidden');
+                    var buttons = document.querySelectorAll('.position-btn');
+                    for (var i = 0; i < buttons.length; i++) buttons[i].disabled = false;
+                    elements.bgBlurToggle.style.opacity = '1';
+                    elements.bgBlurToggle.style.pointerEvents = 'auto';
+                }
+            }
+            function downloadRecording() {
+                if (state.recordedBlob) {
+                    var url = URL.createObjectURL(state.recordedBlob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'showtime-recording-' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.webm';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+            }
+            elements.startBtn.addEventListener('click', startRecording);
+            elements.stopBtn.addEventListener('click', stopRecording);
+            elements.downloadBtn.addEventListener('click', downloadRecording);
+        })();
+    </script>
+</body>
+</html>
